@@ -19,17 +19,29 @@ function driveMediaUrl(driveFileId: string): string {
   return `https://drive.google.com/uc?export=download&id=${encodeURIComponent(driveFileId)}`;
 }
 
-/** Resolve playable URL for the current (or given) quality. Defaults to mobile. */
+/** Real Drive id (not a placeholder / pasted URL). */
+function usableDriveId(id: string | undefined): id is string {
+  if (!id) return false;
+  if (id.startsWith("REPLACE_")) return false;
+  if (id.includes("://") || id.includes("/")) return false;
+  return true;
+}
+
+/**
+ * Resolve playable URL for the current (or given) quality. Defaults to mobile.
+ * Prefer Drive ids when present so production configs that still include local
+ * `src` / `srcHd` paths don't 404 on GitHub Pages.
+ */
 export function mediaUrlFor(video: VideoEntry, quality: VideoQuality = getQuality()): string {
   if (quality === "hd") {
+    if (usableDriveId(video.driveFileIdHd)) return driveMediaUrl(video.driveFileIdHd);
     if (video.srcHd) return video.srcHd;
-    if (video.driveFileIdHd) return driveMediaUrl(video.driveFileIdHd);
     // Fall back to mobile fields if HD not configured
   }
+  if (usableDriveId(video.driveFileId)) return driveMediaUrl(video.driveFileId);
   if (video.src) return video.src;
-  if (video.driveFileId) return driveMediaUrl(video.driveFileId);
+  if (usableDriveId(video.driveFileIdHd)) return driveMediaUrl(video.driveFileIdHd);
   if (video.srcHd) return video.srcHd;
-  if (video.driveFileIdHd) return driveMediaUrl(video.driveFileIdHd);
   return "";
 }
 
