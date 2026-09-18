@@ -113,8 +113,8 @@ function spaFallback() {
 }
 
 export default defineConfig({
-  site: "https://example.com",
-  base: "/",
+  site: "https://saschat.github.io/mel40/",
+  base: "/mel40/",
   vite: {
     plugins: [localMedia(), spaFallback()],
   },
