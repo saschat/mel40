@@ -1,0 +1,28 @@
+{
+  "title": "Example audience config",
+  "videos": [
+    {
+      "id": "alice-msg",
+      "title": "Alice",
+      "order": 1,
+      "hidden": false,
+      "driveFileId": "REPLACE_WITH_DRIVE_FILE_ID",
+      "tags": ["friends", "opening"],
+      "durationSec": 42
+    },
+    {
+      "id": "cousins",
+      "title": "Cousins toast",
+      "order": 2,
+      "driveFileId": "REPLACE_WITH_DRIVE_FILE_ID",
+      "tags": ["family", "groupX"]
+    }
+  ],
+  "playlists": [
+    {
+      "id": "all-messages",
+      "title": "All messages",
+      "items": [{ "videoId": "alice-msg" }, { "videoId": "cousins" }]
+    }
+  ]
+}

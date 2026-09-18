@@ -1,0 +1,13 @@
+---
+import AppShell from "../layouts/AppShell.astro";
+
+/**
+ * Known config paths that must exist as real files in static builds.
+ * Arbitrary Drive file ids still rely on SPA fallback (404.html / Vite middleware).
+ */
+export function getStaticPaths() {
+  return [{ params: { configId: "local" } }];
+}
+---
+
+<AppShell />

@@ -1,0 +1,29 @@
+{
+  "defaults": {
+    "normalize": true
+  },
+  "jobs": [
+    {
+      "id": "alice-msg",
+      "input": "alice-raw.mov"
+    },
+    {
+      "id": "bob-trimmed",
+      "input": "bob.mp4",
+      "ops": [{ "op": "trim", "startSec": 0, "endSec": -3 }]
+    },
+    {
+      "id": "friends-medley",
+      "ops": [
+        {
+          "op": "stitch",
+          "inputs": [
+            { "file": "cara.mov", "trim": { "endSec": -2 } },
+            { "file": "dan.mp4" },
+            { "file": "erin.mov", "trim": { "startSec": 1.5 } }
+          ]
+        }
+      ]
+    }
+  ]
+}

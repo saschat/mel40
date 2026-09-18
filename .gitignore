@@ -1,6 +1,5 @@
 # build output
 dist/
-# generated types
 .astro/
 
 # dependencies
@@ -12,13 +11,21 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-
 # environment variables
 .env
 .env.production
 
-# macOS-specific files
+# macOS / IDE
 .DS_Store
-
-# jetbrains setting folder
 .idea/
+
+# video pipeline
+videos/normalized/
+videos/normalized_mobile/
+*.mp4.fp
+videos/incoming/*
+!videos/incoming/.gitkeep
+!videos/incoming/jobs.example.json
+
+__pycache__/
+*.pyc

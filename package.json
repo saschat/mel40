@@ -1,20 +1,21 @@
 {
-  "name": "interstellar-inclination",
+  "name": "mel40",
   "type": "module",
-  "version": "0.0.1",
+  "version": "0.1.0",
+  "private": true,
   "engines": {
     "node": ">=22.12.0"
   },
   "scripts": {
     "dev": "astro dev",
-    "build": "astro build",
+    "build": "astro build && node scripts/spa-fallback.mjs",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "normalize": "python3 tools/normalize.py",
+    "normalize:mobile": "python3 tools/normalize.py --profile mobile",
+    "normalize:all": "python3 tools/normalize.py --profile all"
   },
   "dependencies": {
     "astro": "^7.3.2"
-  },
-  "allowScripts": {
-    "esbuild": true
   }
 }
