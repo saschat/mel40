@@ -12,6 +12,11 @@ function mediaProxy(): string {
 function driveMediaUrl(driveFileId: string): string {
   const proxy = mediaProxy();
   if (proxy) return `${proxy}/${encodeURIComponent(driveFileId)}`;
+  // Dev: same-origin proxy (avoids CORS + keeps referrer-restricted keys working).
+  if (import.meta.env.DEV) {
+    const base = import.meta.env.BASE_URL || "/";
+    return `${base}api/drive/${encodeURIComponent(driveFileId)}`;
+  }
   const key = apiKey();
   if (key) {
     return `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(driveFileId)}?alt=media&key=${encodeURIComponent(key)}`;
@@ -68,14 +73,17 @@ export async function loadSiteConfig(configId: string): Promise<SiteConfig> {
     if (!res.ok) throw new Error(`Failed to load local config (${localPath})`);
     config = (await res.json()) as SiteConfig;
   } else {
-    const key = apiKey();
-    if (!key) {
-      throw new Error(
-        "Missing PUBLIC_GOOGLE_API_KEY. Set it in .env, or open /local.",
-      );
-    }
-
-    const url = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(configId)}?alt=media&key=${encodeURIComponent(key)}`;
+    const url = import.meta.env.DEV
+      ? `${import.meta.env.BASE_URL}api/drive/${encodeURIComponent(configId)}`
+      : (() => {
+          const key = apiKey();
+          if (!key) {
+            throw new Error(
+              "Missing PUBLIC_GOOGLE_API_KEY. Set it in .env, or open /local.",
+            );
+          }
+          return `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(configId)}?alt=media&key=${encodeURIComponent(key)}`;
+        })();
     const res = await fetch(url);
     if (!res.ok) {
       const text = await res.text().catch(() => "");

@@ -56,6 +56,8 @@ export function mountPlayer(opts: Options): { playVideos: (videos: VideoEntry[])
   let active: HTMLVideoElement = videoA;
   let standby: HTMLVideoElement = videoB;
   let standbyIndex: number | null = null;
+  /** Bumps on every playIndex to drop stale async work. */
+  let playGen = 0;
 
   function srcFor(video: VideoEntry): string {
     return mediaUrlFor(video);
@@ -90,11 +92,49 @@ export function mountPlayer(opts: Options): { playVideos: (videos: VideoEntry[])
     playBtn.textContent = playing ? "Pause" : "Play";
   }
 
+  function isAbortError(err: unknown): boolean {
+    return err instanceof DOMException && err.name === "AbortError";
+  }
+
+  /** play() without treating load-interrupt aborts as user-facing failures. */
+  async function safePlay(el: HTMLVideoElement): Promise<"ok" | "aborted" | "blocked"> {
+    try {
+      await el.play();
+      return "ok";
+    } catch (err) {
+      if (isAbortError(err)) return "aborted";
+      return "blocked";
+    }
+  }
+
+  function waitCanPlay(el: HTMLVideoElement, gen: number): Promise<void> {
+    if (el.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) return Promise.resolve();
+    return new Promise((resolve) => {
+      let settled = false;
+      const poll = window.setInterval(() => {
+        if (gen !== playGen) finish();
+      }, 100);
+      const timer = window.setTimeout(finish, 10_000);
+      function finish() {
+        if (settled) return;
+        settled = true;
+        window.clearInterval(poll);
+        window.clearTimeout(timer);
+        el.removeEventListener("canplay", finish);
+        el.removeEventListener("error", finish);
+        resolve();
+      }
+      el.addEventListener("canplay", finish);
+      el.addEventListener("error", finish);
+    });
+  }
+
   function assign(
     el: HTMLVideoElement,
     video: VideoEntry,
     { muted, preload }: { muted: boolean; preload: string },
   ) {
+    el.pause();
     el.muted = muted;
     el.preload = preload as HTMLVideoElement["preload"];
     el.src = srcFor(video);
@@ -104,13 +144,22 @@ export function mountPlayer(opts: Options): { playVideos: (videos: VideoEntry[])
   function warmNext() {
     const next = queue[index + 1];
     if (!next) {
+      standby.pause();
       standby.removeAttribute("src");
+      standby.load();
       standbyIndex = null;
       return;
     }
-    if (standbyIndex === index + 1 && standby.src) return;
+    if (standbyIndex === index + 1 && standby.getAttribute("src")) return;
     assign(standby, next, { muted: true, preload: "auto" });
     standbyIndex = index + 1;
+  }
+
+  function scheduleWarm(gen: number) {
+    // Defer so load() on standby cannot race the active play() microtask.
+    queueMicrotask(() => {
+      if (gen === playGen) warmNext();
+    });
   }
 
   async function playIndex(
@@ -118,29 +167,45 @@ export function mountPlayer(opts: Options): { playVideos: (videos: VideoEntry[])
     { fromStandby = false, resumeAt }: { fromStandby?: boolean; resumeAt?: number } = {},
   ) {
     if (i < 0 || i >= queue.length) return;
+    const gen = ++playGen;
     index = i;
     const video = queue[index]!;
     setMeta(video);
     setPlayingUi(true);
 
-    if (fromStandby && standbyIndex === i && standby.src) {
+    const useStandby = fromStandby && standbyIndex === i && Boolean(standby.getAttribute("src"));
+
+    if (useStandby) {
       active.pause();
       active.hidden = true;
       standby.hidden = false;
       standby.muted = false;
-      standby.currentTime = 0;
+      // Seeking a Drive-backed element often triggers a new load and aborts play().
+      if (standby.currentTime > 0.35) {
+        try {
+          standby.currentTime = 0;
+        } catch {
+          /* ignore */
+        }
+      }
       const prevActive = active;
       active = standby;
       standby = prevActive;
       standbyIndex = null;
       showOverlay(null);
-      try {
-        await active.play();
-      } catch {
+
+      if (active.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) {
+        await waitCanPlay(active, gen);
+        if (gen !== playGen) return;
+      }
+
+      const result = await safePlay(active);
+      if (gen !== playGen) return;
+      if (result === "blocked" || (result === "aborted" && active.paused)) {
         showOverlay("Tap play to continue");
         setPlayingUi(false);
       }
-      warmNext();
+      scheduleWarm(gen);
       return;
     }
 
@@ -154,6 +219,7 @@ export function mountPlayer(opts: Options): { playVideos: (videos: VideoEntry[])
       active.addEventListener(
         "loadedmetadata",
         () => {
+          if (gen !== playGen) return;
           try {
             active.currentTime = Math.min(seekTo, active.duration || seekTo);
           } catch {
@@ -164,13 +230,16 @@ export function mountPlayer(opts: Options): { playVideos: (videos: VideoEntry[])
       );
     }
 
-    try {
-      await active.play();
-    } catch {
+    await waitCanPlay(active, gen);
+    if (gen !== playGen) return;
+
+    const result = await safePlay(active);
+    if (gen !== playGen) return;
+    if (result === "blocked" || (result === "aborted" && active.paused)) {
       showOverlay("Tap play to start");
       setPlayingUi(false);
     }
-    warmNext();
+    scheduleWarm(gen);
   }
 
   function onTimeUpdate() {
@@ -192,8 +261,9 @@ export function mountPlayer(opts: Options): { playVideos: (videos: VideoEntry[])
 
   function onEnded() {
     if (index + 1 < queue.length) {
-      const canSwap =
-        standbyIndex === index + 1 && standby.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA;
+      // Prefer the prefetched element whenever it holds the next item (even if
+      // still buffering) — re-assigning onto `active` races play()/load().
+      const canSwap = standbyIndex === index + 1 && Boolean(standby.getAttribute("src"));
       void playIndex(index + 1, { fromStandby: canSwap });
     } else {
       setPlayingUi(false);
@@ -237,9 +307,15 @@ export function mountPlayer(opts: Options): { playVideos: (videos: VideoEntry[])
       return;
     }
     if (active.paused) {
-      void active.play();
-      setPlayingUi(true);
-      showOverlay(null);
+      void safePlay(active).then((result) => {
+        if (result === "ok") {
+          setPlayingUi(true);
+          showOverlay(null);
+        } else if (result === "blocked") {
+          showOverlay("Tap play to start");
+          setPlayingUi(false);
+        }
+      });
     } else {
       active.pause();
       setPlayingUi(false);
@@ -307,9 +383,12 @@ export function mountPlayer(opts: Options): { playVideos: (videos: VideoEntry[])
   syncFullscreenUi();
 
   function playVideos(videos: VideoEntry[]) {
+    playGen += 1;
     queue = videos;
     index = 0;
     standbyIndex = null;
+    active.pause();
+    standby.pause();
     if (!queue.length) {
       setMeta(undefined);
       showOverlay("No videos in selection");

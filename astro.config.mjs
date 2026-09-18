@@ -3,9 +3,15 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "astro/config";
+import { loadEnv } from "vite";
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
 
+function googleApiKey() {
+  if (process.env.PUBLIC_GOOGLE_API_KEY) return process.env.PUBLIC_GOOGLE_API_KEY;
+  const env = loadEnv("development", rootDir, "");
+  return env.PUBLIC_GOOGLE_API_KEY || "";
+}
 /**
  * Serve local encodes in `astro dev` (no public/ symlinks).
  * Supports HTTP Range so <video> seeking works.
@@ -102,6 +108,7 @@ function spaFallback() {
           url.startsWith("/media-mobile/") ||
           url.startsWith("/media-hd/") ||
           url.startsWith("/configs/") ||
+          url.startsWith("/api/") ||
           url.includes(".");
         if (req.method === "GET" && isHtml && !isAsset && url !== "/" && url !== "") {
           req.url = "/";
@@ -112,10 +119,79 @@ function spaFallback() {
   };
 }
 
+/**
+ * Same-origin Drive proxy for `astro dev` — avoids browser CORS and keeps the
+ * website-restricted API key happy by forwarding a localhost Referer.
+ */
+function driveDevProxy() {
+  return {
+    name: "mel40-drive-dev-proxy",
+    /** @param {import('vite').ViteDevServer} server */
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        const urlPath = req.url?.split("?")[0] ?? "";
+        const match = /^\/api\/drive\/([^/]+)\/?$/.exec(urlPath);
+        if (!match) return next();
+        if (req.method !== "GET" && req.method !== "HEAD") {
+          res.statusCode = 405;
+          res.end("method not allowed");
+          return;
+        }
+
+        const key = googleApiKey();
+        if (!key) {
+          res.statusCode = 500;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: "PUBLIC_GOOGLE_API_KEY missing in .env" }));
+          return;
+        }
+
+        const fileId = decodeURIComponent(match[1] ?? "");
+        const driveUrl = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media&key=${encodeURIComponent(key)}`;
+        /** @type {Record<string, string>} */
+        const headers = {
+          // Website-restricted keys check Referer on the Google request.
+          Referer: req.headers.referer || "http://localhost:4321/",
+        };
+        if (req.headers.range) headers.Range = String(req.headers.range);
+
+        try {
+          const upstream = await fetch(driveUrl, { headers, method: req.method });
+          res.statusCode = upstream.status;
+          const pass = [
+            "content-type",
+            "content-length",
+            "content-range",
+            "accept-ranges",
+            "cache-control",
+          ];
+          for (const name of pass) {
+            const v = upstream.headers.get(name);
+            if (v) res.setHeader(name, v);
+          }
+          res.setHeader("Accept-Ranges", "bytes");
+          if (req.method === "HEAD" || !upstream.body) {
+            res.end();
+            return;
+          }
+          const { Readable } = await import("node:stream");
+          Readable.fromWeb(/** @type {any} */ (upstream.body)).pipe(res);
+        } catch (err) {
+          res.statusCode = 502;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: String(err) }));
+        }
+      });
+    },
+  };
+}
+
+const isPages = process.env.GITHUB_ACTIONS === "true";
+
 export default defineConfig({
-  site: "https://saschat.github.io/mel40/",
-  base: "/mel40/",
+  site: isPages ? "https://saschat.github.io/mel40/" : undefined,
+  base: isPages ? "/mel40/" : "/",
   vite: {
-    plugins: [localMedia(), spaFallback()],
+    plugins: [localMedia(), driveDevProxy(), spaFallback()],
   },
 });
