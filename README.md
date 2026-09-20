@@ -15,7 +15,7 @@ Open [http://localhost:4321/local](http://localhost:4321/local) for the local ga
 ## How sharing works
 
 1. Normalize videos (below) and upload the MP4s to Google Drive as **Anyone with the link → Viewer**.
-2. Create a JSON config (see `public/site-config.example.json`) listing `driveFileId`, `tags`, playlists.
+2. Create a JSON config (see `public/site-config.example.json`) listing `driveFileId` and `tags`.
 3. Upload that JSON to Drive the same way. Copy its **file id**.
 4. Share `https://<your-site>/<drive-config-file-id>`.
 
@@ -47,7 +47,7 @@ Requires `ffmpeg` and `ffprobe` on `PATH`.
 ## Player
 
 - Tag filter gallery (OR across selected tags).
-- Playlists + “Play filtered”.
+- “Play” queues the current filtered selection.
 - A/B dual-element prefetch to warm the next full video before the cut.
 
 Client-side clip ranges (`startSec`/`endSec`) are backlog.

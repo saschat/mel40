@@ -73,10 +73,9 @@ export function mountPlayer(opts: Options): { playVideos: (videos: VideoEntry[])
     }
     titleEl.hidden = false;
     titleEl.textContent = video.title;
-    const from = video.from?.trim() ?? "";
-    const showFrom = Boolean(from && from.toLowerCase() !== video.title.trim().toLowerCase());
-    fromEl.hidden = !showFrom;
-    fromEl.textContent = showFrom ? `From ${from}` : "";
+    // Temporarily hide "from" in the player UI.
+    fromEl.hidden = true;
+    fromEl.textContent = "";
   }
 
   function showOverlay(message: string | null) {

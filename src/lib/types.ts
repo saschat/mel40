@@ -1,13 +1,3 @@
-export type PlaylistItem = {
-  videoId: string;
-};
-
-export type Playlist = {
-  id: string;
-  title: string;
-  items: PlaylistItem[];
-};
-
 /** Playback quality: mobile = default (smaller), hd = web/normalized. */
 export type VideoQuality = "mobile" | "hd";
 
@@ -34,5 +24,4 @@ export type VideoEntry = {
 export type SiteConfig = {
   title: string;
   videos: VideoEntry[];
-  playlists?: Playlist[];
 };

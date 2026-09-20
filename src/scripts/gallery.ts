@@ -95,11 +95,6 @@ export function mountGallery(opts: Options): { getFiltered: () => VideoEntry[] }
       card.innerHTML = `
         <span class="card__title">${escapeHtml(video.title)}</span>
         ${
-          video.from && video.from.trim().toLowerCase() !== video.title.trim().toLowerCase()
-            ? `<span class="card__from">${escapeHtml(video.from)}</span>`
-            : ""
-        }
-        ${
           (() => {
             const tags = video.tags.filter((t) => t.trim() && t.trim().toLowerCase() !== "todo");
             return tags.length
